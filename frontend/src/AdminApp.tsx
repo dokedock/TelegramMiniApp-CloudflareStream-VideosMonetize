@@ -324,6 +324,7 @@ export function AdminApp() {
     videoId: '',
     provider: 'manual',
     paid: 'false',
+    orderCode: '',
   });
   const [settings, setSettings] = useState<AdminSettings | null>(null);
   const [overview, setOverview] = useState<Overview | null>(null);
@@ -836,10 +837,43 @@ export function AdminApp() {
           }),
         },
       );
+      setDevForm((current) => ({
+        ...current,
+        orderCode: response.order.orderCode,
+      }));
       await Promise.all([refreshTab('orders'), refreshTab('users')]);
       setMessage(`测试订单已创建：${response.order.orderCode}`);
     } catch (caught) {
       showError(caught, '测试订单创建失败');
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function simulateTelegramPayment() {
+    if (!devForm.orderCode.trim()) {
+      setError('请先填写订单号');
+      return;
+    }
+
+    if (!window.confirm(`确认模拟 Telegram 支付回调：${devForm.orderCode}？`)) {
+      return;
+    }
+
+    setError(null);
+    setBusy('dev-telegram-payment');
+
+    try {
+      await adminFetch('/api/admin/dev/simulate-telegram-payment', adminPassword, {
+        method: 'POST',
+        body: JSON.stringify({
+          orderCode: devForm.orderCode,
+        }),
+      });
+      await Promise.all([refreshTab('orders'), refreshTab('logs')]);
+      setMessage(`已模拟 Telegram 支付成功：${devForm.orderCode}`);
+    } catch (caught) {
+      showError(caught, '模拟 Telegram 支付失败');
     } finally {
       setBusy(null);
     }
@@ -1665,6 +1699,19 @@ export function AdminApp() {
                     <option value="true">已支付并授权</option>
                   </select>
                 </label>
+                <label>
+                  <span>模拟回调订单号</span>
+                  <input
+                    value={devForm.orderCode}
+                    onChange={(event) =>
+                      setDevForm((current) => ({
+                        ...current,
+                        orderCode: event.target.value,
+                      }))
+                    }
+                    placeholder="创建测试订单后自动填入"
+                  />
+                </label>
               </div>
               <section className="admin-actions">
                 <button className="primary-button" onClick={() => void createTestUser()}>
@@ -1672,6 +1719,12 @@ export function AdminApp() {
                 </button>
                 <button className="secondary-button" onClick={() => void createTestOrder()}>
                   创建测试订单
+                </button>
+                <button
+                  className="secondary-button"
+                  onClick={() => void simulateTelegramPayment()}
+                >
+                  模拟 Telegram 支付
                 </button>
                 <button className="secondary-button danger" onClick={() => void clearPlaySessions()}>
                   清理播放记录

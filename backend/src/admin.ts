@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { logActivity } from './activity.js';
 import { config } from './config.js';
 import { prisma } from './db.js';
+import { markOrderPaidFromTelegram } from './payments.js';
 import {
   getRuntimeSettings,
   maskSecret,
@@ -1219,6 +1220,44 @@ export async function registerAdminRoutes(app: FastifyInstance) {
         id: result.order.id,
         orderCode: result.order.orderCode,
         status: result.order.status,
+      },
+    };
+  });
+
+  app.post('/api/admin/dev/simulate-telegram-payment', async (request) => {
+    assertAdmin(request);
+
+    const body = z
+      .object({
+        orderCode: z.string().min(1),
+      })
+      .parse(request.body);
+    const order = await prisma.order.findUniqueOrThrow({
+      where: { orderCode: body.orderCode },
+    });
+
+    await markOrderPaidFromTelegram(order.orderCode, {
+      currency: order.currency,
+      total_amount: order.amountCents,
+      telegram_payment_charge_id: `dev_tg_${order.orderCode}`,
+      provider_payment_charge_id: `dev_provider_${order.orderCode}`,
+    });
+
+    await logActivity({
+      actorType: 'admin',
+      action: 'dev.simulate_telegram_payment',
+      entityType: 'order',
+      entityId: order.id,
+      message: `模拟 Telegram 支付回调：${order.orderCode}`,
+      request,
+    });
+
+    return {
+      ok: true,
+      order: {
+        id: order.id,
+        orderCode: order.orderCode,
+        status: 'PAID',
       },
     };
   });

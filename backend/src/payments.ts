@@ -112,7 +112,7 @@ export async function answerPreCheckoutQuery(
   });
 }
 
-async function markOrderPaidFromTelegram(
+export async function markOrderPaidFromTelegram(
   orderCode: string,
   payment: {
     currency: string;

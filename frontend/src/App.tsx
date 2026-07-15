@@ -6,7 +6,7 @@ import {
   ShieldCheck,
   ShoppingCart,
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { apiFetch, type PlayResponse, type Video } from './api';
 
 type User = {
@@ -276,6 +276,7 @@ function PlayerView({
   onBack: () => void;
 }) {
   const [positionIndex, setPositionIndex] = useState(0);
+  const endedSentRef = useRef(false);
   const watermarkPositions = useMemo(
     () => [
       { top: '18%', left: '12%' },
@@ -286,6 +287,22 @@ function PlayerView({
     ],
     [],
   );
+  const sendEvent = useCallback(
+    (eventType: 'play' | 'pause' | 'heartbeat' | 'ended') =>
+      apiFetch(`/api/play-sessions/${playback.sessionCode}/events`, {
+        method: 'POST',
+        body: JSON.stringify({ eventType }),
+      }).catch(() => undefined),
+    [playback.sessionCode],
+  );
+  const sendEnded = useCallback(() => {
+    if (endedSentRef.current) {
+      return;
+    }
+
+    endedSentRef.current = true;
+    void sendEvent('ended');
+  }, [sendEvent]);
 
   useEffect(() => {
     const movement = window.setInterval(() => {
@@ -293,22 +310,28 @@ function PlayerView({
     }, 10000);
 
     const heartbeat = window.setInterval(() => {
-      void apiFetch(`/api/play-sessions/${playback.sessionCode}/events`, {
-        method: 'POST',
-        body: JSON.stringify({ eventType: 'heartbeat' }),
-      }).catch(() => undefined);
+      void sendEvent('heartbeat');
     }, 20000);
 
-    void apiFetch(`/api/play-sessions/${playback.sessionCode}/events`, {
-      method: 'POST',
-      body: JSON.stringify({ eventType: 'play' }),
-    }).catch(() => undefined);
+    const handleVisibilityChange = () => {
+      void sendEvent(document.hidden ? 'pause' : 'play');
+    };
+    const handlePageHide = () => {
+      sendEnded();
+    };
+
+    void sendEvent('play');
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('pagehide', handlePageHide);
 
     return () => {
       window.clearInterval(movement);
       window.clearInterval(heartbeat);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('pagehide', handlePageHide);
+      sendEnded();
     };
-  }, [playback.sessionCode, watermarkPositions.length]);
+  }, [sendEnded, sendEvent, watermarkPositions.length]);
 
   const orderPosition = watermarkPositions[positionIndex];
   const isDemo = playback.playbackUrl.includes('demo-video-uid');
@@ -316,7 +339,14 @@ function PlayerView({
   return (
     <main className="player-page">
       <header className="player-header">
-        <button className="icon-button" onClick={onBack} aria-label="返回">
+        <button
+          className="icon-button"
+          onClick={() => {
+            sendEnded();
+            onBack();
+          }}
+          aria-label="返回"
+        >
           <ArrowLeft size={19} />
         </button>
         <h1>{video.title}</h1>

@@ -59,7 +59,7 @@ Telegram Mini App
 - 播放器层官方水印
 - 播放器层订单号水印
 - 订单号水印随机移动
-- 播放心跳上报
+- 播放事件上报：play、pause、heartbeat、ended
 - 播放 session 创建
 - 单用户并发播放限制
 - 本地支付方式选择：
@@ -96,6 +96,7 @@ Telegram Mini App
 - 开发工具：
   - 创建测试用户
   - 创建测试订单
+  - 模拟 Telegram 支付回调
   - 清理播放 session 和播放事件
 
 ### 后端能力
@@ -210,6 +211,7 @@ npm run dev
 npm run dev
 npm run build
 npm run typecheck
+npm run smoke
 npm run prisma:generate
 npm run prisma:migrate
 npm run seed
@@ -269,6 +271,25 @@ VITE_TELEGRAM_BOT_USERNAME=
 - 手动支付：创建待支付订单，需要后台手动标记支付。
 - USDT：当前为本地占位流程，创建待支付订单。
 - Stripe：当前为本地占位流程，创建待支付订单。
+
+开发工具页还提供“模拟 Telegram 支付”：
+
+```text
+创建一笔 provider=telegram 的待支付测试订单
+  -> 订单号自动填入“模拟回调订单号”
+  -> 点击“模拟 Telegram 支付”
+  -> 后端按 Telegram successful_payment 逻辑标记订单 PAID
+  -> 自动发放观看权限
+  -> 日志页记录模拟回调动作
+```
+
+也可以用命令快速跑一遍本地核心链路：
+
+```bash
+npm run smoke
+```
+
+该脚本会检查后端健康状态、创建一笔 Telegram 待支付测试订单、模拟 Telegram 支付成功、验证订单变为 `PAID` 且权限为 `ACTIVE`，并检查活动日志是否写入。
 
 ## Telegram Payments
 
