@@ -1,0 +1,160 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum VideoStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  CANCELLED
+  REFUNDED
+}
+
+enum EntitlementStatus {
+  ACTIVE
+  REVOKED
+  EXPIRED
+}
+
+model User {
+  id             Int       @id @default(autoincrement())
+  telegramUserId BigInt    @unique
+  username       String?   @db.VarChar(191)
+  firstName      String?   @db.VarChar(191)
+  lastName       String?   @db.VarChar(191)
+  languageCode   String?   @db.VarChar(16)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  orders        Order[]
+  entitlements  Entitlement[]
+  playSessions  PlaySession[]
+}
+
+model Video {
+  id                  Int         @id @default(autoincrement())
+  title               String      @db.VarChar(191)
+  description         String?     @db.Text
+  cloudflareVideoUid  String      @db.VarChar(191)
+  priceCents          Int
+  currency            String      @default("USD") @db.VarChar(16)
+  status              VideoStatus @default(ACTIVE)
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+
+  orders        Order[]
+  entitlements  Entitlement[]
+  playSessions  PlaySession[]
+}
+
+model Order {
+  id                Int         @id @default(autoincrement())
+  orderCode         String      @unique @db.VarChar(32)
+  userId            Int
+  videoId           Int
+  amountCents       Int
+  currency          String      @db.VarChar(16)
+  status            OrderStatus @default(PENDING)
+  provider          String      @default("mock") @db.VarChar(64)
+  providerPaymentId String?     @db.VarChar(191)
+  paidAt            DateTime?
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  user          User          @relation(fields: [userId], references: [id])
+  video         Video         @relation(fields: [videoId], references: [id])
+  entitlement   Entitlement?
+  playSessions  PlaySession[]
+
+  @@index([userId])
+  @@index([videoId])
+}
+
+model Entitlement {
+  id        Int                @id @default(autoincrement())
+  userId    Int
+  videoId   Int
+  orderId   Int                @unique
+  status    EntitlementStatus  @default(ACTIVE)
+  startsAt  DateTime           @default(now())
+  expiresAt DateTime?
+  revokedAt DateTime?
+  createdAt DateTime           @default(now())
+
+  user   User  @relation(fields: [userId], references: [id])
+  video  Video @relation(fields: [videoId], references: [id])
+  order  Order @relation(fields: [orderId], references: [id])
+
+  @@index([userId])
+  @@index([videoId])
+}
+
+model PlaySession {
+  id             Int       @id @default(autoincrement())
+  sessionCode    String    @unique @db.VarChar(32)
+  userId         Int
+  videoId        Int
+  orderId        Int
+  ipAddress      String?   @db.VarChar(64)
+  userAgent      String?   @db.VarChar(512)
+  tokenExpiresAt DateTime
+  createdAt      DateTime  @default(now())
+  lastSeenAt     DateTime?
+
+  user    User        @relation(fields: [userId], references: [id])
+  video   Video       @relation(fields: [videoId], references: [id])
+  order   Order       @relation(fields: [orderId], references: [id])
+  events  PlayEvent[]
+
+  @@index([userId])
+  @@index([videoId])
+  @@index([orderId])
+}
+
+model PlayEvent {
+  id                      Int         @id @default(autoincrement())
+  playSessionId           Int
+  eventType               String      @db.VarChar(64)
+  playbackPositionSeconds Int?
+  createdAt               DateTime    @default(now())
+
+  playSession PlaySession @relation(fields: [playSessionId], references: [id])
+
+  @@index([playSessionId])
+}
+
+model AppSetting {
+  id        Int      @id @default(autoincrement())
+  key       String   @unique @db.VarChar(191)
+  value     String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ActivityLog {
+  id         Int      @id @default(autoincrement())
+  actorType  String   @db.VarChar(32)
+  actorId    String?  @db.VarChar(64)
+  action     String   @db.VarChar(80)
+  entityType String   @db.VarChar(64)
+  entityId   Int?
+  message    String   @db.VarChar(255)
+  metadata   String?  @db.Text
+  ipAddress  String?  @db.VarChar(64)
+  userAgent  String?  @db.VarChar(512)
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([action])
+  @@index([createdAt])
+}
